@@ -15,7 +15,36 @@ class MethodChannelFileX extends FileXPlatform {
   ///
   /// MethodChannel(binding.binaryMessenger, "file_x")
   static const MethodChannel _channel = MethodChannel('file_x');
+  
+  /// Event stream
+  static final StreamController<FileXEvent> _events =
+      StreamController<FileXEvent>.broadcast();
+  MethodChannelFileX() {
+    _channel.setMethodCallHandler(_handleNativeCallbacks);
+  }
 
+  static Stream<FileXEvent> get events => _events.stream;
+
+  static Future<void> _handleNativeCallbacks(MethodCall call) async {
+    switch (call.method) {
+      case 'onUsbAttached':
+        _events.add(const FileXEvent(FileXEventType.usbAttached));
+        break;
+
+      case 'onUsbDetached':
+        _events.add(const FileXEvent(FileXEventType.usbDetached));
+        break;
+
+      case 'onSafPicked':
+        _events.add(
+          FileXEvent(
+            FileXEventType.safPicked,
+            payload: call.arguments as String?,
+          ),
+        );
+        break;
+    }
+  }
   // ─────────────────────────────────────────────
   // Storage roots
   // ─────────────────────────────────────────────
@@ -210,4 +239,14 @@ class MethodChannelFileX extends FileXPlatform {
       'uri': uri,
     });
   }
+}
+
+
+enum FileXEventType { usbAttached, usbDetached, safPicked }
+
+class FileXEvent {
+  final FileXEventType type;
+  final String? payload;
+
+  const FileXEvent(this.type, {this.payload});
 }

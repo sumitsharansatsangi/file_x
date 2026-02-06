@@ -1,3 +1,5 @@
+import 'package:file_x/file_x_method_channel.dart';
+
 import 'file_x_platform_interface.dart';
 
 /// FileX
@@ -11,6 +13,9 @@ import 'file_x_platform_interface.dart';
 /// Platform-specific details (MethodChannel, Android SAF, etc.)
 /// are intentionally hidden.
 class FileX {
+
+  /// Event stream
+  Stream<FileXEvent> get events =>  MethodChannelFileX.events;
   /// Returns native filesystem roots such as:
   /// - Internal storage
   /// - External SD card

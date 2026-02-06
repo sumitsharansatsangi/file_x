@@ -23,6 +23,8 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
 import androidx.core.net.toUri
+import android.hardware.usb.UsbManager
+
 
 /**
  * Request code used for SAF (Storage Access Framework) folder picker.
@@ -434,50 +436,6 @@ class FilexPlugin :
     }
 
 
-    private fun openSafUriWithChooser(
-    uri: Uri,
-    mimeHint: String?,
-    result: MethodChannel.Result
-    ) {
-        val mime =
-            if (!mimeHint.isNullOrBlank() && mimeHint != "*/*")
-                mimeHint
-            else
-                context.contentResolver.getType(uri) ?: "*/*"
-
-        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mime)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        val chooser = Intent.createChooser(viewIntent, "Open with")
-
-        try {
-            val resInfoList = context.packageManager
-                .queryIntentActivities(viewIntent, PackageManager.MATCH_DEFAULT_ONLY)
-
-            for (info in resInfoList) {
-                context.grantUriPermission(
-                    info.activityInfo.packageName,
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-
-            activity?.startActivity(chooser)
-            result.success(
-                mapOf("ok" to true, "uri" to uri.toString())
-            )
-        } catch (e: ActivityNotFoundException) {
-            Log.e("NO_APP","No app found to open file",e)
-            result.error("NO_APP", "No app found to open file", null)
-        } catch (e: Exception) {
-            Log.e("Failed", "Failed to open file",e)
-            result.error("FAILED", "Failed to open file", null)
-        }
-    }
-
-
     // Native storage roots
     // ─────────────────────────────────────────────
     private fun addRoot(
@@ -836,25 +794,39 @@ class FilexPlugin :
 
     // ─────────────────────────────────────────────
     // USB listener
-    // ─────────────────────────────────────────────
+    // ────────────────────────────────────────
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) {
+            Log.d("FileX_USB", "USB intent: ${intent.action}")
             when (intent.action) {
+
+                // Filesystem-based USB (some devices)
                 Intent.ACTION_MEDIA_MOUNTED ->
                     channel.invokeMethod("onUsbAttached", null)
+
                 Intent.ACTION_MEDIA_REMOVED,
                 Intent.ACTION_MEDIA_UNMOUNTED ->
+                    channel.invokeMethod("onUsbDetached", null)
+
+                // Device-based USB (MOST devices)
+                UsbManager.ACTION_USB_DEVICE_ATTACHED ->
+                    channel.invokeMethod("onUsbAttached", null)
+
+                UsbManager.ACTION_USB_DEVICE_DETACHED ->
                     channel.invokeMethod("onUsbDetached", null)
             }
         }
     }
+
 
     private fun registerUsbReceiver() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_MEDIA_MOUNTED)
             addAction(Intent.ACTION_MEDIA_REMOVED)
             addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
             addDataScheme("file")
         }
         context.registerReceiver(usbReceiver, filter)
@@ -937,98 +909,6 @@ class FilexPlugin :
         }
     }
 
-
-    private fun openUriOld(
-        uri: Uri,
-        mime: String,
-        result: MethodChannel.Result
-    ) {
-        val finalMime =
-            if (mime.isNotBlank() && mime != "*/*")
-                mime
-            else
-                context.contentResolver.getType(uri) ?: "*/*"
-
-        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, finalMime)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        val chooser = Intent.createChooser(viewIntent, "Open with")
-
-        try {
-            // Pre-grant URI permission to avoid resolver hesitation
-            val resInfoList = context.packageManager
-                .queryIntentActivities(viewIntent, PackageManager.MATCH_DEFAULT_ONLY)
-
-            for (info in resInfoList) {
-                context.grantUriPermission(
-                    info.activityInfo.packageName,
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-
-            activity?.startActivity(chooser)
-
-            result.success(
-                mapOf(
-                    "ok" to true,
-                    "uri" to uri.toString()
-                )
-            )
-        } catch (e: ActivityNotFoundException) {
-            if (isDebug()) {
-                Log.e("FileX", "No app found to open file", e)
-            }
-            result.error("NO_APP", "No app found to open file", null)
-        } catch (e: Exception) {
-            if (isDebug()) {
-                Log.e("FileX", "Failed to open file", e)
-            }
-            result.error("FAILED", "Failed to open file", null)
-        } finally {
-            clearPending()
-        }
-    }
-
-
-    // ---------------- Heuristics ----------------
-
-    private fun needsSafForPath(file: File): Boolean {
-        // Android 9 and below → direct path access is OK
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return false
-        }
-
-        val path = file.absolutePath
-
-        // Android 10+ → public Downloads is SAF territory
-        if (
-            path.startsWith(
-                Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOWNLOADS
-                ).absolutePath
-            )
-        ) {
-            return true
-        }
-
-        // If file is not readable via path, SAF required
-        if (!file.canRead()) {
-            return true
-        }
-
-        // Android 11+ → MANAGE_EXTERNAL_STORAGE required
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                return true
-            }
-        }
-
-        return false
-    }
-
     // ---------------- SAF ----------------
 
     private fun launchSaf(mime: String, result: MethodChannel.Result) {
@@ -1053,9 +933,6 @@ class FilexPlugin :
         pendingResult = result
         pendingMime = mime
         activity?.startActivityForResult(intent, REQ_SAF_OPEN)
-    }
-    private fun isSafUri(uri: Uri): Boolean {
-        return DocumentsContract.isDocumentUri(context, uri)
     }
 
     override fun onActivityResult(

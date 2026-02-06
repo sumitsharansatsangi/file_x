@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:file_x/file_x.dart';
+import 'package:file_x/file_x_method_channel.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -33,6 +36,8 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
   final fileX = FileX();
   List<Map<String, dynamic>> roots = [];
   bool loading = true;
+  late final StreamSubscription<FileXEvent> _sub;
+
 
   Future<void> ensureStoragePermission(
     FileX fileX,
@@ -69,14 +74,75 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _sub = fileX.events.listen((event) async {
+      switch (event.type) {
+        case FileXEventType.usbAttached:
+          await _handleUsbAttached();
+          break;
+
+        case FileXEventType.usbDetached:
+        case FileXEventType.safPicked:
+          await _refreshRoots();
+          break;
+      }
+    });
     _init();
   }
 
-  Future<void> _init() async {
-    await ensureStoragePermission(fileX, context);
+  Future<void> _handleUsbAttached() async {
+    // Snapshot current native roots
+    final beforePaths = roots
+        .where((r) => r['type'] == 'native')
+        .map((r) => r['path'])
+        .toSet();
 
+    // Give Android a moment to finish mounting
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    final updatedRoots = await fileX.getAllRoots();
+
+    final nativeUsbAppeared = updatedRoots.any((r) {
+      return r['type'] == 'native' &&
+          r['path'] != null &&
+          !beforePaths.contains(r['path']);
+    });
+
+    if (!nativeUsbAppeared && mounted) {
+      final shouldAsk = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('USB storage detected'),
+          content: const Text(
+            'To access files on the USB device, permission is required.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Grant access'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldAsk == true) {
+        await fileX.openSafFolderPicker();
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      roots = updatedRoots;
+      loading = false;
+    });
+  }
+
+
+  Future<void> _refreshRoots() async {
     final data = await fileX.getAllRoots();
-
     if (!mounted) return;
     setState(() {
       roots = data;
@@ -84,9 +150,17 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
     });
   }
 
+
+  Future<void> _init() async {
+    await ensureStoragePermission(fileX, context);
+    await _refreshRoots();
+  }
+
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _sub.cancel();
     super.dispose();
   }
 
