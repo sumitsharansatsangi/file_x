@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:storax/models/storax_entry.dart';
+import 'package:storax/models/storax_mode.dart';
+import 'package:storax/models/storax_volume.dart';
 import 'package:storax/storax.dart';
 import 'package:storax/storax_method_channel.dart';
 import 'package:flutter/material.dart';
@@ -34,7 +37,7 @@ class RootsPage extends StatefulWidget {
 
 class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
   final storax = Storax();
-  List<Map<String, dynamic>> roots = [];
+  List<StoraxVolume> roots = [];
   bool loading = true;
   late final StreamSubscription<StoraxEvent> _sub;
 
@@ -91,8 +94,8 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
   Future<void> _handleUsbAttached() async {
     // Snapshot current native roots
     final beforePaths = roots
-        .where((r) => r['type'] == 'native')
-        .map((r) => r['path'])
+        .where((r) => r.mode == StoraxMode.native)
+        .map((r) => r.path)
         .toSet();
 
     // Give Android a moment to finish mounting
@@ -101,9 +104,9 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
     final updatedRoots = await storax.getAllRoots();
 
     final nativeUsbAppeared = updatedRoots.any((r) {
-      return r['type'] == 'native' &&
-          r['path'] != null &&
-          !beforePaths.contains(r['path']);
+      return r.mode == StoraxMode.native &&
+          r.path != null &&
+          !beforePaths.contains(r.path);
     });
 
     if (!nativeUsbAppeared && mounted) {
@@ -192,19 +195,19 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
               itemCount: roots.length,
               itemBuilder: (_, i) {
                 final r = roots[i];
-                final isSaf = r['type'] == 'saf';
+                final isSaf = r.mode == StoraxMode.saf;
                 return ListTile(
                   leading: Icon(isSaf ? Icons.lock : Icons.storage),
-                  title: Text(r['name'] ?? ''),
+                  title: Text(r.name),
                   isThreeLine: true,
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(isSaf ? 'SAF folder' : r['path'] ?? ''),
+                      Text(isSaf ? 'SAF folder' : r.path ?? ''),
                       isSaf
                           ? const Text('SAF folder')
                           : Text(
-                              '${storax.formatBytes(r['free'] ?? 0)} free of ${storax.formatBytes(r['total'] ?? 0)}',
+                              '${storax.formatBytes(r.free)} free of ${storax.formatBytes(r.total)}',
                             ),
                     ],
                   ),
@@ -213,9 +216,9 @@ class _RootsPageState extends State<RootsPage> with WidgetsBindingObserver {
                     context,
                     MaterialPageRoute(
                       builder: (_) => FileBrowserPage(
-                        initialTarget: isSaf ? r['uri'] : r['path'],
+                        initialTarget: (isSaf ? r.uri : r.path) ?? '',
                         isSaf: isSaf,
-                        title: r['name'],
+                        title: r.name,
                       ),
                     ),
                   ),
@@ -250,7 +253,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   final storax = Storax();
 
   final List<String> pathStack = [];
-  List<Map<String, dynamic>> entries = [];
+  List<StoraxEntry> entries = [];
 
   bool gridView = true;
   String search = '';
@@ -273,33 +276,31 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     });
   }
 
-  List<Map<String, dynamic>> _applySearchAndSort(
-    List<Map<String, dynamic>> data,
-  ) {
+  List<StoraxEntry> _applySearchAndSort(List<StoraxEntry> data) {
     var out = data.where((e) {
-      return e['name'].toString().toLowerCase().contains(search.toLowerCase());
+      return e.name.toString().toLowerCase().contains(search.toLowerCase());
     }).toList();
 
     out.sort((a, b) {
       switch (sortMode) {
         case SortMode.size:
-          return (a['size'] ?? 0).compareTo(b['size'] ?? 0);
+          return (a.size).compareTo(b.size);
         case SortMode.date:
-          return (a['lastModified'] ?? 0).compareTo(b['lastModified'] ?? 0);
+          return (a.lastModified).compareTo(b.lastModified);
         case SortMode.name:
-          return a['name'].compareTo(b['name']);
+          return a.name.compareTo(b.name);
       }
     });
     return out;
   }
 
-  void _open(Map<String, dynamic> e) {
-    if (e['isDirectory'] == true) {
-      pathStack.add(widget.isSaf ? e['uri'] : e['path']);
+  void _open(StoraxEntry e) {
+    if (e.isDirectory == true) {
+      pathStack.add((widget.isSaf ? e.uri : e.path) ?? "");
       _load();
     } else {
-      debugPrint("Opening ${e['path']} with ${e['mime']}");
-      storax.openFile(path: e['path'], mime: e['mime']);
+      debugPrint("Opening ${e.path} with ${e.mime}");
+      storax.openFile(path: e.path, mime: e.mime);
     }
   }
 
@@ -427,14 +428,14 @@ class _SearchBar extends StatelessWidget {
 }
 
 class _EntryTile extends StatelessWidget {
-  final Map<String, dynamic> entry;
+  final StoraxEntry entry;
   final VoidCallback onTap;
 
   const _EntryTile({required this.entry, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final isDir = entry['isDirectory'] == true;
+    final isDir = entry.isDirectory == true;
     return InkWell(
       onTap: onTap,
       onLongPress: () => _showActions(context, entry),
@@ -448,7 +449,7 @@ class _EntryTile extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            entry['name'],
+            entry.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
@@ -460,7 +461,7 @@ class _EntryTile extends StatelessWidget {
 }
 
 class _EntryListTile extends StatelessWidget {
-  final Map<String, dynamic> entry;
+  final StoraxEntry entry;
   final VoidCallback onTap;
 
   const _EntryListTile({required this.entry, required this.onTap});
@@ -469,10 +470,10 @@ class _EntryListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(_iconFor(entry)),
-      title: Text(entry['name']),
-      subtitle: entry['isDirectory']
+      title: Text(entry.name),
+      subtitle: entry.isDirectory
           ? const Text('Folder')
-          : Text(entry['mime'] ?? ''),
+          : Text(entry.mime ?? ''),
       onTap: onTap,
       onLongPress: () => _showActions(context, entry),
     );
@@ -483,7 +484,7 @@ class _EntryListTile extends StatelessWidget {
  * FILE ACTIONS (example hooks)
  * ───────────────────────────────────────────── */
 
-void _showActions(BuildContext context, Map<String, dynamic> e) {
+void _showActions(BuildContext context, StoraxEntry e) {
   showModalBottomSheet(
     context: context,
     builder: (_) => SafeArea(
@@ -506,9 +507,9 @@ void _showActions(BuildContext context, Map<String, dynamic> e) {
  * UTILITIES
  * ───────────────────────────────────────────── */
 
-IconData _iconFor(Map<String, dynamic> e) {
-  if (e['isDirectory'] == true) return Icons.folder;
-  final mime = e['mime'] ?? '';
+IconData _iconFor(StoraxEntry e) {
+  if (e.isDirectory == true) return Icons.folder;
+  final mime = e.mime ?? '';
   if (mime.startsWith('image')) return Icons.image;
   if (mime.startsWith('video')) return Icons.movie;
   if (mime.startsWith('audio')) return Icons.music_note;

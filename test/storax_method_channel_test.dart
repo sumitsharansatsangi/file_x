@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:storax/models/storax_volume.dart';
 import 'package:storax/storax_method_channel.dart';
 
 void main() {
@@ -60,10 +61,10 @@ void main() {
     test('getNativeRoots returns parsed roots', () async {
       final roots = await platform.getNativeRoots();
 
-      expect(roots, isA<List<Map<String, dynamic>>>());
+      expect(roots, isA<List<StoraxVolume>>());
       expect(roots.length, 1);
-      expect(roots.first['name'], 'Internal storage');
-      expect(roots.first['path'], '/storage/emulated/0');
+      expect(roots.first.name, 'Internal storage');
+      expect(roots.first.path, '/storage/emulated/0');
     });
 
     test('hasAllFilesAccess returns true', () async {
@@ -78,8 +79,8 @@ void main() {
       );
 
       expect(files.length, 1);
-      expect(files.first['name'], 'file.txt');
-      expect(files.first['isDirectory'], false);
+      expect(files.first.name, 'file.txt');
+      expect(files.first.isDirectory, false);
     });
   });
 }

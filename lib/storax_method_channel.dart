@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:storax/models/storax_oem.dart';
+import 'package:storax/models/storax_volume.dart';
+import 'package:storax/models/storax_entry.dart';
 import 'storax_platform_interface.dart';
 
 /// MethodChannel-based implementation of [StoraxPlatform].
@@ -57,9 +60,9 @@ class MethodChannelStorax extends StoraxPlatform {
   ///
   /// Each root contains metadata like total/free space.
   @override
-  Future<List<Map<String, dynamic>>> getNativeRoots() async {
+  Future<List<StoraxVolume>> getNativeRoots() async {
     final result = await _channel.invokeMethod<List<dynamic>>('getNativeRoots');
-    return _castList(result);
+    return _parseStorageVolumes(result);
   }
 
   /// Returns all available roots:
@@ -68,9 +71,9 @@ class MethodChannelStorax extends StoraxPlatform {
   ///
   /// Useful for building a unified "All storage locations" UI.
   @override
-  Future<List<Map<String, dynamic>>> getAllRoots() async {
+  Future<List<StoraxVolume>> getAllRoots() async {
     final result = await _channel.invokeMethod<List<dynamic>>('getAllRoots');
-    return _castList(result);
+    return _parseStorageVolumes(result);
   }
 
   // ─────────────────────────────────────────────
@@ -93,7 +96,7 @@ class MethodChannelStorax extends StoraxPlatform {
   /// - extensions (e.g. ["pdf", "jpg"])
   /// - mimeTypes (e.g. ["image/*"])
   @override
-  Future<List<Map<String, dynamic>>> listDirectory({
+  Future<List<StoraxEntry>> listDirectory({
     required String target,
     required bool isSaf,
     Map<String, dynamic>? filters,
@@ -103,7 +106,7 @@ class MethodChannelStorax extends StoraxPlatform {
       'isSaf': isSaf,
       'filters': ?filters,
     });
-    return _castList(result);
+    return _parseEntries(result);
   }
 
   // ─────────────────────────────────────────────
@@ -120,7 +123,7 @@ class MethodChannelStorax extends StoraxPlatform {
   /// - Index building
   /// - Folder analytics
   @override
-  Future<List<Map<String, dynamic>>> traverseDirectory({
+  Future<List<StoraxEntry>> traverseDirectory({
     required String target,
     required bool isSaf,
     int maxDepth = 10,
@@ -135,7 +138,7 @@ class MethodChannelStorax extends StoraxPlatform {
         'filters': ?filters,
       },
     );
-    return _castList(result);
+    return _parseEntries(result);
   }
 
   // ─────────────────────────────────────────────
@@ -182,11 +185,11 @@ class MethodChannelStorax extends StoraxPlatform {
   ///
   /// Useful for debugging OEM-specific storage issues.
   @override
-  Future<Map<String, dynamic>> detectOEM() async {
+  Future<StoraxOem?> detectOEM() async {
     final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'detectOEM',
     );
-    return Map<String, dynamic>.from(result ?? {});
+    return _parseOem(result);
   }
 
   /// Performs a lightweight permission & environment health check.
@@ -211,10 +214,28 @@ class MethodChannelStorax extends StoraxPlatform {
   ///
   /// Platform channels return `List<dynamic>`; this helper
   /// ensures consistent `List<Map<String, dynamic>>` output.
-  List<Map<String, dynamic>> _castList(List<dynamic>? data) {
-    return data == null
-        ? <Map<String, dynamic>>[]
-        : data.map((e) => Map<String, dynamic>.from(e)).toList();
+  List<StoraxVolume> _parseStorageVolumes(List<dynamic>? data) {
+    if (data == null) return const [];
+
+    return List<StoraxVolume>.unmodifiable(
+      data.whereType<Map>().map(
+        (e) => StoraxVolume.fromMap(Map<String, dynamic>.from(e)),
+      ),
+    );
+  }
+
+  List<StoraxEntry> _parseEntries(List<dynamic>? data) {
+    if (data == null) return const [];
+
+    return List.unmodifiable(
+      data.map((e) => StoraxEntry.fromMap(Map<String, dynamic>.from(e))),
+    );
+  }
+ 
+ StoraxOem? _parseOem(Map<dynamic, dynamic>? data) {
+    if (data == null) return null;
+
+    return StoraxOem.fromMap(Map<String, dynamic>.from(data));
   }
 
   /// Opens a file for reading.

@@ -1,3 +1,6 @@
+import 'package:storax/models/storax_oem.dart';
+import 'package:storax/models/storax_volume.dart';
+import 'package:storax/models/storax_entry.dart';
 import 'package:storax/storax_method_channel.dart';
 
 import 'storax_platform_interface.dart';
@@ -23,7 +26,7 @@ class Storax {
   /// - Adopted storage
   ///
   /// Each root includes storage statistics like total/free space.
-  Future<List<Map<String, dynamic>>> getNativeRoots() {
+  Future<List<StoraxVolume>> getNativeRoots() {
     return StoraxPlatform.instance.getNativeRoots();
   }
 
@@ -32,7 +35,7 @@ class Storax {
   /// - SAF (Storage Access Framework) roots selected by the user
   ///
   /// Useful for building a unified "Select storage location" UI.
-  Future<List<Map<String, dynamic>>> getAllRoots() {
+  Future<List<StoraxVolume>> getAllRoots() {
     return StoraxPlatform.instance.getAllRoots();
   }
 
@@ -52,7 +55,7 @@ class Storax {
   /// - modifiedAfter / modifiedBefore (epoch millis)
   /// - extensions (e.g. ["pdf", "jpg"])
   /// - mimeTypes (e.g. ["image/*"])
-  Future<List<Map<String, dynamic>>> listDirectory({
+  Future<List<StoraxEntry>> listDirectory({
     required String target,
     required bool isSaf,
     Map<String, dynamic>? filters,
@@ -76,7 +79,7 @@ class Storax {
   /// - Media scanning
   /// - Folder analytics
   /// - Index building
-  Future<List<Map<String, dynamic>>> traverseDirectory({
+  Future<List<StoraxEntry>> traverseDirectory({
     required String target,
     required bool isSaf,
     int maxDepth = 10,
@@ -132,7 +135,7 @@ class Storax {
   /// - SDK level
   ///
   /// Useful for debugging OEM-specific storage behavior.
-  Future<Map<String, dynamic>> detectOEM() {
+  Future<StoraxOem?> detectOEM() {
     return StoraxPlatform.instance.detectOEM();
   }
 

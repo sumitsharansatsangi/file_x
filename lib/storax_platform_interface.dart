@@ -1,4 +1,7 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:storax/models/storax_oem.dart';
+import 'package:storax/models/storax_volume.dart';
+import 'package:storax/models/storax_entry.dart';
 
 import 'storax_method_channel.dart';
 
@@ -45,14 +48,14 @@ abstract class StoraxPlatform extends PlatformInterface {
   /// - Adopted storage
   ///
   /// Each entry includes storage statistics like total and free space.
-  Future<List<Map<String, dynamic>>> getNativeRoots();
+  Future<List<StoraxVolume>> getNativeRoots();
 
   /// Returns all available storage roots:
   /// - Native filesystem roots
   /// - SAF (Storage Access Framework) roots selected by the user
   ///
   /// Useful for building a unified storage selector UI.
-  Future<List<Map<String, dynamic>>> getAllRoots();
+  Future<List<StoraxVolume>> getAllRoots();
 
   // ─────────────────────────────────────────────
   // Directory listing
@@ -74,7 +77,7 @@ abstract class StoraxPlatform extends PlatformInterface {
   /// - modifiedAfter / modifiedBefore (epoch millis)
   /// - extensions (e.g. ["pdf", "jpg"])
   /// - mimeTypes (e.g. ["image/*"])
-  Future<List<Map<String, dynamic>>> listDirectory({
+  Future<List<StoraxEntry>> listDirectory({
     required String target,
     required bool isSaf,
     Map<String, dynamic>? filters,
@@ -95,7 +98,7 @@ abstract class StoraxPlatform extends PlatformInterface {
   /// - Folder analytics
   ///
   /// [maxDepth] controls how deep recursion may go.
-  Future<List<Map<String, dynamic>>> traverseDirectory({
+  Future<List<StoraxEntry>> traverseDirectory({
     required String target,
     required bool isSaf,
     int maxDepth,
@@ -136,7 +139,7 @@ abstract class StoraxPlatform extends PlatformInterface {
   /// - SDK level
   ///
   /// Useful for debugging OEM-specific storage behavior.
-  Future<Map<String, dynamic>> detectOEM();
+  Future<StoraxOem?> detectOEM();
 
   /// Performs a high-level permission and environment health check.
   ///

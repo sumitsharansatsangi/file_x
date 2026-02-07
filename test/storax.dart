@@ -1,5 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:storax/models/storax_mode.dart';
+import 'package:storax/models/storax_oem.dart';
+import 'package:storax/models/storax_volume.dart';
+import 'package:storax/models/storax_entry.dart';
 import 'package:storax/storax_method_channel.dart';
 import 'package:storax/storax_platform_interface.dart';
 import 'package:storax/storax.dart';
@@ -10,47 +14,46 @@ class MockStoraxPlatform
     with MockPlatformInterfaceMixin
     implements StoraxPlatform {
   @override
-  Future<List<Map<String, dynamic>>> getNativeRoots() async {
+  Future<List<StoraxVolume>> getNativeRoots() async {
     return [
-      {
-        'type': 'native',
-        'name': 'Mock storage',
-        'path': '/mock/path',
-        'total': 100,
-        'free': 50,
-        'used': 50,
-        'writable': true,
-      },
+      StoraxVolume(
+        mode: StoraxMode.native,
+        name: 'Mock storage',
+        path: '/mock/path',
+        total: 100,
+        free: 50,
+        used: 50,
+        writable: true,
+      ),
     ];
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getAllRoots() async {
+  Future<List<StoraxVolume>> getAllRoots() async {
     return await getNativeRoots();
   }
 
   @override
-  Future<List<Map<String, dynamic>>> listDirectory({
+  Future<List<StoraxEntry>> listDirectory({
     required String target,
     required bool isSaf,
     Map<String, dynamic>? filters,
   }) async {
     return [
-      {
-        'name': 'mock.txt',
-        'path': '/mock/path/mock.txt',
-        'uri': null,
-        'isDirectory': false,
-        'size': 123,
-        'lastModified': 1700000000000,
-        'mime': 'text/plain',
-        'storageType': 'native',
-      },
+      StoraxEntry(
+        name: 'mock.txt',
+        path: '/mock/path/mock.txt',
+        isDirectory: false,
+        size: 123,
+        lastModified: 1700000000000,
+        mime: 'text/plain',
+        mode: StoraxMode.native,
+      ),
     ];
   }
 
   @override
-  Future<List<Map<String, dynamic>>> traverseDirectory({
+  Future<List<StoraxEntry>> traverseDirectory({
     required String target,
     required bool isSaf,
     int maxDepth = 10,
@@ -69,13 +72,13 @@ class MockStoraxPlatform
   Future<void> requestAllFilesAccess() async {}
 
   @override
-  Future<Map<String, dynamic>> detectOEM() async {
-    return {
-      'manufacturer': 'Mock',
-      'brand': 'MockBrand',
-      'model': 'MockModel',
-      'sdk': '34',
-    };
+  Future<StoraxOem?> detectOEM() async {
+    return  StoraxOem(
+      manufacturer: 'Mock',
+      brand: 'MockBrand',
+      model: 'MockModel',
+      sdk: 34,
+    );
   }
 
   @override
@@ -104,14 +107,17 @@ void main() {
     StoraxPlatform.instance = fakePlatform;
 
     final roots = await storax.getNativeRoots();
-    final files = await storax.listDirectory(target: '/mock/path', isSaf: false);
+    final files = await storax.listDirectory(
+      target: '/mock/path',
+      isSaf: false,
+    );
     final hasAccess = await storax.hasAllFilesAccess();
     final oem = await storax.detectOEM();
 
-    expect(roots.first['name'], 'Mock storage');
-    expect(files.first['name'], 'mock.txt');
+    expect(roots.first.name, 'Mock storage');
+    expect(files.first.name, 'mock.txt');
     expect(hasAccess, isTrue);
-    expect(oem['manufacturer'], 'Mock');
+    expect(oem?.manufacturer, 'Mock');
 
     // Restore original platform
     StoraxPlatform.instance = initialPlatform;
