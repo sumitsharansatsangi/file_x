@@ -1,6 +1,6 @@
 name: storax
 description: "Android storage access for Flutter — SAF-aware, OEM-safe, and honest."
-version: 0.0.1
+version: 0.0.2
 homepage: https://github.com/sumitsharansatsangi/storax
 
 topics: 
@@ -11,8 +11,8 @@ topics:
   - file-explorer
 
 environment:
-  sdk: ^3.10.8
-  flutter: '>=3.3.0'
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.19.0"
 
 dependencies:
   flutter:

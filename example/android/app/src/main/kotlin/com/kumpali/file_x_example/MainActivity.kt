@@ -1,4 +1,4 @@
-package com.kumpali.file_x_example
+package com.kumpali.storax_example
 
 import io.flutter.embedding.android.FlutterActivity
 
