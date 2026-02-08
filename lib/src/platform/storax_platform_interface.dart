@@ -151,35 +151,58 @@ abstract class StoraxPlatform extends PlatformInterface {
   Future<Map<String, dynamic>> permissionHealthCheck();
 
   /// Creates a new folder.
-  Future<void> createFolder({required String parent, required String name, required bool isSaf});
+  Future<void> createFolder({
+    required String parent,
+    required String name,
+    required bool isSaf,
+  });
+
   /// Creates a new file.
-  Future<void> createFile({required String parent, required String name, String? mime, required bool isSaf});
+  Future<void> createFile({
+    required String parent,
+    required String name,
+    String? mime,
+    required bool isSaf,
+  });
 
   /// Copy file (native or SAF).
   /// Returns a jobId immediately.
-  Future<String> copy({required String source, required String destination, required bool isSaf});
+  Future<String> copy({
+    required String source,
+    required String destination,
+    required bool isSaf,
+  });
 
   /// Move file (native or SAF).
   /// Returns a jobId immediately.
-  Future<String> move({required String source, required String destination, required bool isSaf});
+  Future<String> move({
+    required String source,
+    required String destination,
+    required bool isSaf,
+  });
 
   /// Rename file or folder.
-  Future<void> rename({required String target, required String newName, required bool isSaf});
+  Future<void> rename({
+    required String target,
+    required String newName,
+    required bool isSaf,
+  });
 
   /// Deletes a file or folder.
   Future<void> delete({required String target, required bool isSaf});
 
   /// Moves a file or folder to trash.
-    Future<void> moveToTrash({
+  Future<void> moveToTrash({
     required String target,
     required bool isSaf,
     String? safRootUri,
   });
+
   /// Lists trash entries.
   Future<List<StoraxTrashEntry>> listTrash();
 
   /// Restores a trashed file or folder.
-  Future<void> restoreFromTrash( StoraxTrashEntry entry);
+  Future<void> restoreFromTrash(StoraxTrashEntry entry);
 
   /// Empties trash.
   Future<void> emptyTrash({required bool isSaf, String? safRootUri});

@@ -152,30 +152,72 @@ class Storax {
   }
 
   /// Creates a new folder.
-  Future<void> createFolder({required String parent, required String name, required bool isSaf}) {
-    return StoraxPlatform.instance.createFolder(parent: parent, name: name, isSaf: isSaf);
+  Future<void> createFolder({
+    required String parent,
+    required String name,
+    required bool isSaf,
+  }) {
+    return StoraxPlatform.instance.createFolder(
+      parent: parent,
+      name: name,
+      isSaf: isSaf,
+    );
   }
 
   /// Creates a new file.
-  Future<void> createFile({required String parent, required String name, String? mime, required bool isSaf}) {
-    return StoraxPlatform.instance.createFile(parent: parent, name: name, mime: mime, isSaf: isSaf);
+  Future<void> createFile({
+    required String parent,
+    required String name,
+    String? mime,
+    required bool isSaf,
+  }) {
+    return StoraxPlatform.instance.createFile(
+      parent: parent,
+      name: name,
+      mime: mime,
+      isSaf: isSaf,
+    );
   }
 
   /// Copy file (native or SAF).
   /// Returns a jobId immediately.
-  Future<String> copy({required String source, required String destination, required bool isSaf}) {
-    return StoraxPlatform.instance.copy(source: source, destination: destination, isSaf: isSaf);
+  Future<String> copy({
+    required String source,
+    required String destination,
+    required bool isSaf,
+  }) {
+    return StoraxPlatform.instance.copy(
+      source: source,
+      destination: destination,
+      isSaf: isSaf,
+    );
   }
 
   /// Move file (native or SAF).
   /// Returns a jobId immediately.
-  Future<String> move({required String source, required String destination, required bool isSaf}) {
-    return StoraxPlatform.instance.move(source: source, destination: destination, isSaf: isSaf);
+  Future<String> move({
+    required String source,
+    required String destination,
+    required bool isSaf,
+  }) {
+    return StoraxPlatform.instance.move(
+      source: source,
+      destination: destination,
+      isSaf: isSaf,
+    );
   }
 
   /// Rename file or folder.
-  Future<void> rename({required String target, required String newName, required bool isSaf}) {
-    return StoraxPlatform.instance.rename(target: target, newName: newName, isSaf: isSaf);
+  Future<void> rename({
+    required String target,
+    required String newName,
+    required bool isSaf,
+  }) {
+    return StoraxPlatform.instance.rename(
+      target: target,
+      newName: newName,
+      isSaf: isSaf,
+    );
   }
 
   /// Deletes a file or folder.
@@ -193,14 +235,14 @@ class Storax {
     safRootUri: safRootUri,
   );
 
-  Future<List<StoraxTrashEntry>> listTrash() => StoraxPlatform.instance.listTrash();
+  Future<List<StoraxTrashEntry>> listTrash() =>
+      StoraxPlatform.instance.listTrash();
 
   Future<void> restoreFromTrash(StoraxTrashEntry entry) =>
       StoraxPlatform.instance.restoreFromTrash(entry);
 
   Future<void> emptyTrash({required bool isSaf, String? safRootUri}) =>
       StoraxPlatform.instance.emptyTrash(isSaf: isSaf, safRootUri: safRootUri);
-
 
   /// Opens a file for reading.
   ///

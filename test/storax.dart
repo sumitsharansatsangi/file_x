@@ -94,10 +94,19 @@ class MockStoraxPlatform
   // ─────────────────────────────────────────────
 
   @override
-  Future<void> createFolder({required String parent, required String name, required bool isSaf}) async {}
+  Future<void> createFolder({
+    required String parent,
+    required String name,
+    required bool isSaf,
+  }) async {}
 
   @override
-  Future<void> createFile({required String parent, required String name, String? mime, required bool isSaf}) async {}
+  Future<void> createFile({
+    required String parent,
+    required String name,
+    String? mime,
+    required bool isSaf,
+  }) async {}
 
   @override
   Future<String> copy({
@@ -147,7 +156,6 @@ class MockStoraxPlatform
 
   @override
   Future<void> openFile({String? path, String? mime, String? uri}) async {}
-
 }
 
 void main() {

@@ -48,15 +48,14 @@ class MethodChannelStorax extends StoraxPlatform {
           ),
         );
         break;
-       case 'onTransferProgress':
-      _events.add(
-        StoraxEvent(
-          StoraxEventType.transferProgress,
-          payload: call.arguments, // ✅ Map<String, dynamic>
-        ),
-      );
-      break;
-
+      case 'onTransferProgress':
+        _events.add(
+          StoraxEvent(
+            StoraxEventType.transferProgress,
+            payload: call.arguments, // ✅ Map<String, dynamic>
+          ),
+        );
+        break;
     }
   }
   // ─────────────────────────────────────────────
@@ -217,7 +216,6 @@ class MethodChannelStorax extends StoraxPlatform {
     return Map<String, dynamic>.from(result ?? {});
   }
 
-
   // ─────────────────────────────────────────────
   // File operations (NEW)
   // ─────────────────────────────────────────────
@@ -241,7 +239,7 @@ class MethodChannelStorax extends StoraxPlatform {
   Future<void> createFile({
     required String parent,
     required String name,
-    String ?mime,
+    String? mime,
     required bool isSaf,
   }) async {
     await _channel.invokeMethod('createFile', {
@@ -300,7 +298,7 @@ class MethodChannelStorax extends StoraxPlatform {
     });
   }
 
-   /// Deletes a file or folder.
+  /// Deletes a file or folder.
   @override
   Future<void> delete({required String target, required bool isSaf}) async {
     await _channel.invokeMethod('delete', {'target': target, 'isSaf': isSaf});
@@ -394,7 +392,4 @@ class MethodChannelStorax extends StoraxPlatform {
       'uri': uri,
     });
   }
-
-  
-
 }
