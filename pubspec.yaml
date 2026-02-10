@@ -1,6 +1,6 @@
 name: storax
 description: "Android storage access for Flutter — SAF-aware, OEM-safe, and honest."
-version: 0.0.6
+version: 0.0.7
 homepage: https://github.com/sumitsharansatsangi/storax
 
 topics: 

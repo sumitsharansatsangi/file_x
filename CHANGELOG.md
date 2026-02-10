@@ -1,3 +1,8 @@
+## 0.0.7
+
+* Breaking change:
+   *  `openFile` now takes `path` and `mime` parameters only.
+
 ## 0.0.6
 
 * New: Added `getPlatformVersion` and `getSDKIntVersion` methods
