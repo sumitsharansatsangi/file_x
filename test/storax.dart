@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
@@ -166,6 +168,27 @@ class MockStoraxPlatform
 
   @override
   Future<void> openFile({String? path, String? mime, String? uri}) async {}
+
+  @override
+  Future<List<Uint8List>?> generateGifThumbnail({
+    required String videoPath,
+    int? width,
+    int? height,
+    int frameCount = 10,
+  }) async {
+    return null;
+  }
+
+
+  @override
+  Future<List<Uint8List>?> generateUniqueFrame({
+    required String videoPath,
+    int? width,
+    int? height,
+  }) async {
+    return null;
+  }
+
 }
 
 void main() {
@@ -235,4 +258,16 @@ void main() {
     // Restore original platform
     StoraxPlatform.instance = initialPlatform;
   });
+
+  test('generateGifThumbnail', () async {
+    final frames = await Storax().generateGifThumbnail(
+      videoPath: '/storage/emulated/0/Download/video.mp4',
+      width: 100,
+      height: 100,
+      frameCount: 10,
+    );
+    expect(frames, isNotNull);
+    expect(frames!.length, 10);
+  });
+
 }

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.*
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.*
 import android.os.storage.StorageManager
@@ -24,7 +25,14 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import androidx.core.net.toUri
 import android.hardware.usb.UsbManager
+import android.media.MediaMetadataRetriever
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import androidx.core.graphics.scale
 
 
 /**
@@ -101,6 +109,8 @@ class StoraxPlugin :
     private val safRootPathCache = ConcurrentHashMap<Uri, String>()
     // File path → resolved document URI
     private val safFileCache = ConcurrentHashMap<String, Uri>()
+
+    private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // ─────────────────────────────────────────────
     // Flutter engine lifecycle
@@ -644,7 +654,8 @@ class StoraxPlugin :
                     }
                 }
             }
-
+            "generateGifThumbnail" -> handleGifThumbnail(call, result)
+            "generateUniqueFrame" -> handleUniqueFrameSequence(call, result)
             else -> result.notImplemented()
         }
     }
@@ -819,7 +830,7 @@ class StoraxPlugin :
         if (after != null && modified < after) return false
         if (before != null && modified > before) return false
 
-        if (exts != null && exts.isNotEmpty()) {
+        if (!exts.isNullOrEmpty()) {
             val ext = name.substringAfterLast('.', "").lowercase(Locale.US)
             if (ext !in exts.map { it.toString().lowercase(Locale.US) }) return false
         }
@@ -1845,6 +1856,158 @@ class StoraxPlugin :
     private fun emitProgress(data: Map<String, Any?>) {
         mainHandler.post {
             channel.invokeMethod("onTransferProgress", data)
+        }
+    }
+
+
+    private fun handleGifThumbnail(call: MethodCall, result: MethodChannel.Result) {
+        val videoPath = call.argument<String>("videoPath")
+        val width = call.argument<Int>("width")
+        val height = call.argument<Int>("height")
+        val frameCount = call.argument<Int>("frameCount") ?: 10
+
+        coroutineScope.launch {
+            val frames = withContext(Dispatchers.IO) {
+                generateFrameSequence(videoPath!!, width, height, frameCount)
+            }
+            withContext(Dispatchers.Main) { 
+                result.success(frames) // This returns a List<ByteArray> to Flutter
+            }
+        }
+    }
+
+    private fun handleUniqueFrameSequence(call: MethodCall, result: MethodChannel.Result) {
+        val videoPath = call.argument<String>("videoPath")
+        val width = call.argument<Int>("width")
+        val height = call.argument<Int>("height")
+
+        coroutineScope.launch {
+            val frames = withContext(Dispatchers.IO) {
+                generateUniqueFrameSequence(videoPath!!, width, height)
+            }
+            withContext(Dispatchers.Main) {
+                result.success(frames) // This returns a List<ByteArray> to Flutter
+            }
+        }
+    }
+
+
+    private fun generateUniqueFrameSequence(videoPath: String, width: Int?, height: Int?): List<ByteArray>? {
+        val retriever = MediaMetadataRetriever()
+        val frameList = mutableListOf<ByteArray>()
+
+        try {
+            setDataSource(retriever, videoPath)
+
+            // 1. Get total duration in Milliseconds
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val durationMs = durationStr?.toLong() ?: 0L
+
+            // 2. Divide by 10 to get segments. We extract from the middle of each segment
+            // to avoid potential black frames at the very start/end.
+            val intervalUs = (durationMs * 1000) / 10
+
+            for (i in 0 until 10) {
+                val timeUs = i * intervalUs
+
+                // 3. CRITICAL: Use OPTION_CLOSEST instead of OPTION_CLOSEST_SYNC
+                // This ensures uniqueness by decoding delta frames if necessary.
+                val bitmap = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+
+                if (bitmap != null) {
+                    val resized = resizeBitmap(bitmap, width, height)
+                    val stream = java.io.ByteArrayOutputStream()
+
+                    // Use 70-80% quality to keep memory footprint low for 50 videos
+                    resized.compress(Bitmap.CompressFormat.JPEG, 75, stream)
+                    frameList.add(stream.toByteArray())
+
+                    // 4. Memory Hygiene: Recycle the heavy raw bitmap immediately
+                    bitmap.recycle()
+                }
+            }
+            return frameList
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private fun generateFrameSequence(videoPath: String, width: Int?, height: Int?, frameCount: Int): List<ByteArray>? {
+        val retriever = MediaMetadataRetriever()
+        val frameList = mutableListOf<ByteArray>()
+        try {
+            setDataSource(retriever, videoPath)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L
+            val interval = (duration / frameCount) * 1000 // In microseconds
+
+            for (i in 0 until frameCount) {
+                val time = i * interval
+                var bitmap = retriever.getFrameAtTime(time, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                if (bitmap != null) {
+                    bitmap = resizeBitmap(bitmap, width, height)
+                    val stream = java.io.ByteArrayOutputStream()
+                    // Use WEBP for better compression/speed or JPEG
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream)
+                    frameList.add(stream.toByteArray())
+                }
+            }
+            return frameList
+        } catch (e: Exception) {
+            return null
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private fun resizeBitmap(bitmap: Bitmap, width: Int?, height: Int?): Bitmap {
+        // If no width or height is provided, return the original bitmap
+        if (width == null && height == null) return bitmap
+
+        val srcWidth = bitmap.width
+        val srcHeight = bitmap.height
+
+        // Calculate the target width and height while maintaining aspect ratio
+        val targetWidth: Int
+        val targetHeight: Int
+
+        when {
+            width != null && height != null -> {
+                targetWidth = width
+                targetHeight = height
+            }
+            width != null -> {
+                targetWidth = width
+                targetHeight = (width * srcHeight) / srcWidth
+            }
+            height != null -> {
+                targetHeight = height
+                targetWidth = (height * srcWidth) / srcHeight
+            }
+            else -> return bitmap
+        }
+
+        // createScaledBitmap handles the actual resizing.
+        // The 'filter = true' parameter uses bilinear filtering for smoother edges.
+        return bitmap.scale(targetWidth, targetHeight)
+    }
+    private fun setDataSource(retriever: MediaMetadataRetriever, videoPath: String) {
+        try {
+            when {
+                videoPath.startsWith("content://") -> {
+                    val uri = videoPath.toUri()
+                    retriever.setDataSource(context, uri)
+                }
+                else -> {
+                    // Local file path
+                    retriever.setDataSource(videoPath)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            throw e
         }
     }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:storax/storax.dart';
 
@@ -278,12 +279,12 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     );
   }
 
-  Future<void> _open(StoraxEntry e) async{
+  Future<void> _open(StoraxEntry e) async {
     if (e.isDirectory) {
       pathStack.add((widget.isSaf ? e.uri : e.path)!);
       _load();
     } else {
-      await storax.openFile(path: e.path ?? e.uri?? "", mime: e.mime);
+      await storax.openFile(path: e.path ?? e.uri ?? "", mime: e.mime);
     }
   }
 
@@ -387,7 +388,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
               itemBuilder: (_, i) {
                 final e = entries[i];
                 return InkWell(
-                  onTap: ()async  => await _open(e),
+                  onTap: () async {
+                    await _open(e);
+                  },
                   onLongPress: () => _showActions(e),
                   child: Column(
                     children: [
@@ -414,7 +417,30 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                     e.isDirectory ? Icons.folder : Icons.insert_drive_file,
                   ),
                   title: Text(e.name),
-                  onTap: ()async => await _open(e),
+                  onTap: () async {
+                    debugPrint(e.mime);
+                    debugPrint(e.path);
+                    debugPrint(e.uri);
+                    if (e.mime != null && e.mime!.contains("video")) {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              VideoThumbnailPage(videoPath: e.path ?? e.uri!),
+                        ),
+                      );
+                    }
+                    else if ( e.path != null && e.path!.contains("mp4")){
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              VideoThumbnailPage(videoPath: e.path ?? e.uri!),
+                        ),
+                      );
+                    }
+                    else{
+                      await _open(e);
+                    }
+                  },
                   onLongPress: () => _showActions(e),
                 );
               },
@@ -525,6 +551,83 @@ class _TrashPageState extends State<TrashPage> {
           );
         },
       ),
+    );
+  }
+}
+
+/* ─────────────────────────────────────────────
+ * VIDEO THUMBNAIL PAGE
+ *  */
+class VideoThumbnailPage extends StatelessWidget {
+  final String videoPath;
+
+  const VideoThumbnailPage({super.key, required this.videoPath});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Video Thumbnail')),
+      body: FutureBuilder<List<Uint8List>?>(
+        future: Storax().generateUniqueFrame(
+          videoPath: videoPath,
+          width: 300, // Keep quality low for 50 items
+          // frameCount: 8,
+        ),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            debugPrint(snapshot.data!.length.toString());
+            return VideoPreviewPlayer(frames: snapshot.data!);
+          }
+          return Center(child: CircularProgressIndicator());
+        },
+      ),
+    );
+  }
+}
+
+class VideoPreviewPlayer extends StatefulWidget {
+  final List<Uint8List> frames;
+  final Duration fps;
+
+  const VideoPreviewPlayer({
+    super.key,
+    required this.frames,
+    this.fps = const Duration(milliseconds: 150),
+  });
+
+  @override
+  VideoPreviewPlayerState createState() => VideoPreviewPlayerState();
+}
+
+class VideoPreviewPlayerState extends State<VideoPreviewPlayer> {
+  int _frameIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Start the "animation" loop
+    _timer = Timer.periodic(widget.fps, (timer) {
+      if (mounted) {
+        setState(() {
+          _frameIndex = (_frameIndex + 1) % widget.frames.length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.memory(
+      widget.frames[_frameIndex],
+      fit: BoxFit.cover,
+      gaplessPlayback: true, // Prevents flickering when switching frames
     );
   }
 }

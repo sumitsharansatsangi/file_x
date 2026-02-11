@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:storax/src/models/storax_oem.dart';
 import 'package:storax/src/models/storax_trash_entry.dart';
@@ -231,4 +233,33 @@ abstract class StoraxPlatform extends PlatformInterface {
   ///
   /// [mime] is optional and may be used to override the detected MIME type.
   Future<void> openFile({String? path, String? mime, String? uri});
+
+  /// Generates a sequence of frames from a video file.
+  ///
+  /// [videoPath] can be:
+  /// - A native filesystem path (e.g. `/storage/emulated/0/Download/file.mp4`)
+  /// - A SAF URI (`content://…`)
+  /// - A file:// URI
+  ///
+  /// [width] and [height] are optional and may be used to resize the frames.
+  ///
+  /// [frameCount] is optional and defaults to 10.
+  Future<List<Uint8List>?> generateGifThumbnail({
+    required String videoPath,
+    int? width,
+    int? height,
+    int frameCount = 10,
+  });
+
+  /// Generates a thumbnail for the given video.
+  ///
+  /// [videoPath] is the path to the video file.
+  ///
+  /// [width] and [height] are optional and may be used to resize the frames.
+  Future<List<Uint8List>?> generateUniqueFrame({
+    required String videoPath,
+    int? width,
+    int? height,
+  });
+
 }

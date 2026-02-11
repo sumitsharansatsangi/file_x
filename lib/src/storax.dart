@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:storax/src/models/storax_oem.dart';
 import 'package:storax/src/models/storax_trash_entry.dart';
 import 'package:storax/src/models/storax_volume.dart';
@@ -293,4 +295,31 @@ class Storax {
 
     return '${size.toStringAsFixed(2)} ${units[unit]}';
   }
+
+  Future<List<Uint8List>?> generateGifThumbnail({
+    required String videoPath,
+    int? width,
+    int? height,
+    int frameCount = 10,
+  }) {
+    return StoraxPlatform.instance.generateGifThumbnail(
+      videoPath: videoPath,
+      width: width,
+      height: height,
+      frameCount: frameCount,
+    );
+  }
+
+  Future<List<Uint8List>?> generateUniqueFrame({
+    required String videoPath,
+    int? width,
+    int? height,
+  }) {
+    return StoraxPlatform.instance.generateUniqueFrame(
+      videoPath: videoPath,
+      width: width,
+      height: height,
+    );
+  }
+
 }

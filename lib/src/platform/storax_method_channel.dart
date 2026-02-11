@@ -402,4 +402,51 @@ class MethodChannelStorax extends StoraxPlatform {
       'uri': uri,
     });
   }
+  /// Generates a sequence of frames from a video file.
+  ///
+  /// [videoPath] can be:
+  /// - A native filesystem path (e.g. `/storage/emulated/0/Download/file.mp4`)
+  /// - A SAF URI (`content://…`)
+  /// - A file:// URI
+  ///
+  /// [width] and [height] are optional and may be used to resize the frames.
+  ///
+  /// [frameCount] is optional and defaults to 10.
+  @override
+  Future<List<Uint8List>?> generateGifThumbnail({
+    required String videoPath,
+    int? width,
+    int? height,
+    int frameCount = 10,
+  }) async {
+    final result = await _channel.invokeMethod<List<dynamic>>(
+      'generateGifThumbnail',
+      {
+        'videoPath': videoPath,
+        'width': width,
+        'height': height,
+        'frameCount': frameCount,
+      },
+    );
+    return result?.map((e) => Uint8List.fromList(e)).toList(growable: false);
+  }
+
+
+  @override
+  Future<List<Uint8List>?> generateUniqueFrame({
+    required String videoPath,
+    int? width,
+    int? height,
+  }) async {
+    final result = await _channel.invokeMethod<List<dynamic>>(
+      'generateUniqueFrame',
+      {
+        'videoPath': videoPath,
+        'width': width,
+        'height': height,
+      },
+    );
+    return result?.map((e) => Uint8List.fromList(e)).toList(growable: false);
+  }
+
 }
