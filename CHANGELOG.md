@@ -1,3 +1,8 @@
+## 0.0.8
+
+* New: Added `generateUniqueFrame` method
+* New: Added `generateGifThumbnail` method
+
 ## 0.0.7
 
 * Breaking change:
