@@ -1,265 +1,186 @@
 import 'dart:typed_data';
 
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
-import 'package:storax/src/models/storax_oem.dart';
+import 'package:storax/src/models/storax_device_capabilities.dart';
+import 'package:storax/src/models/storax_entry.dart';
 import 'package:storax/src/models/storax_trash_entry.dart';
 import 'package:storax/src/models/storax_volume.dart';
-import 'package:storax/src/models/storax_entry.dart';
-
 import 'storax_method_channel.dart';
 
 /// Platform interface for the Storax plugin.
 ///
-/// This class defines the **contract** that all platform-specific
-/// implementations (Android, iOS, desktop, web) must follow.
+/// Defines the contract that all platform implementations must follow.
 ///
-/// The default implementation is [MethodChannelStorax], which talks
-/// to the native Android plugin via a MethodChannel.
+/// This interface mirrors the latest native Android implementation.
 ///
 /// ⚠️ Do NOT add implementation logic here.
-/// This class must remain abstract.
 abstract class StoraxPlatform extends PlatformInterface {
   StoraxPlatform() : super(token: _token);
 
   static final Object _token = Object();
-
   static StoraxPlatform _instance = MethodChannelStorax();
 
-  /// The active platform implementation.
-  ///
-  /// By default this is [MethodChannelStorax].
-  /// Platform-specific implementations (e.g. desktop, web)
-  /// may override this during registration.
+  /// Current platform implementation.
   static StoraxPlatform get instance => _instance;
 
-  /// Sets a new platform implementation.
-  ///
-  /// This is typically called by platform-specific registration code.
   static set instance(StoraxPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
   }
 
-  /// Returns the platform version.
-  ///
-  /// For example, `Android 11`.
-
-  Future<String?> getPlatformVersion() {
-    throw UnimplementedError('platformVersion() has not been implemented.');
-  }
-
-  /// Returns the SDK version.
-  ///
-  /// For example, `30`.
-  Future<int?> getSDKIntVersion() {
-    throw UnimplementedError('getSDKIntVersion() has not been implemented.');
-  }
-
   // ─────────────────────────────────────────────
-  // Storage roots
+  // ROOT DISCOVERY
   // ─────────────────────────────────────────────
 
-  /// Returns native filesystem roots such as:
-  /// - Internal storage
-  /// - External SD card
-  /// - USB OTG
-  /// - Adopted storage
-  ///
-  /// Each entry includes storage statistics like total and free space.
+  /// Returns native filesystem roots
+  /// (internal storage, SD, USB, etc).
   Future<List<StoraxVolume>> getNativeRoots();
 
-  /// Returns all available storage roots:
-  /// - Native filesystem roots
-  /// - SAF (Storage Access Framework) roots selected by the user
-  ///
-  /// Useful for building a unified storage selector UI.
+  /// Returns SAF roots selected by user.
+  Future<List<StoraxVolume>> getSafRoots();
+
+  /// Returns unified list of all available roots.
   Future<List<StoraxVolume>> getAllRoots();
 
+  /// Returns detailed device + environment capabilities.
+  Future<StoraxDeviceCapabilities?> getDeviceCapabilities();
+
   // ─────────────────────────────────────────────
-  // Directory listing
+  // PERMISSIONS
+  // ─────────────────────────────────────────────
+
+  Future<bool> hasAllFilesAccess();
+
+  Future<void> requestAllFilesAccess();
+
+  // ─────────────────────────────────────────────
+  // SAF
+  // ─────────────────────────────────────────────
+
+  Future<void> openSafFolderPicker();
+
+  // ─────────────────────────────────────────────
+  // DIRECTORY OPERATIONS
   // ─────────────────────────────────────────────
 
   /// Lists immediate children of a directory.
   ///
-  /// This is a **non-recursive** operation intended for
-  /// fast UI folder browsing.
-  ///
-  /// [target] can be:
-  /// - A native filesystem path (e.g. `/storage/emulated/0/Download`)
-  /// - A SAF URI (`content://…`)
-  ///
-  /// [isSaf] must correctly indicate the type of [target].
-  ///
-  /// [filters] is optional and may contain:
-  /// - minSize / maxSize (bytes)
-  /// - modifiedAfter / modifiedBefore (epoch millis)
-  /// - extensions (e.g. ["pdf", "jpg"])
-  /// - mimeTypes (e.g. ["image/*"])
-  Future<List<StoraxEntry>> listDirectory({
-    required String target,
-    required bool isSaf,
-    Map<String, dynamic>? filters,
-  });
+  /// [target] may be either:
+  /// - Native filesystem path
+  /// - SAF content:// URI
+  Future<List<StoraxEntry>> listDirectory({required String target});
 
-  // ─────────────────────────────────────────────
-  // Recursive traversal
-  // ─────────────────────────────────────────────
-
-  /// Recursively traverses a directory tree.
-  ///
-  /// This method is **depth-limited** to prevent runaway recursion.
-  ///
-  /// Common use cases:
-  /// - File search
-  /// - Media scanning
-  /// - Indexing
-  /// - Folder analytics
-  ///
-  /// [maxDepth] controls how deep recursion may go.
+  /// Recursively traverses a directory.
   Future<List<StoraxEntry>> traverseDirectory({
     required String target,
-    required bool isSaf,
-    int maxDepth,
-    Map<String, dynamic>? filters,
+    int maxDepth = -1,
   });
 
   // ─────────────────────────────────────────────
-  // SAF (Storage Access Framework)
+  // CREATE
   // ─────────────────────────────────────────────
 
-  /// Opens the system SAF folder picker.
+  /// Creates a file or folder.
   ///
-  /// After the user selects a folder, the native platform
-  /// will emit an `onSafPicked` callback on the MethodChannel.
-  Future<void> openSafFolderPicker();
-
-  // ─────────────────────────────────────────────
-  // Permissions
-  // ─────────────────────────────────────────────
-
-  /// Returns `true` if the app has full filesystem access:
-  /// - MANAGE_EXTERNAL_STORAGE on Android 11+
-  /// - Always `true` on older Android versions
-  Future<bool> hasAllFilesAccess();
-
-  /// Opens the appropriate system settings screen
-  /// where the user can grant full filesystem access.
-  Future<void> requestAllFilesAccess();
-
-  // ─────────────────────────────────────────────
-  // Diagnostics
-  // ─────────────────────────────────────────────
-
-  /// Returns OEM and device information such as:
-  /// - manufacturer
-  /// - brand
-  /// - model
-  /// - SDK level
-  ///
-  /// Useful for debugging OEM-specific storage behavior.
-  Future<StoraxOem?> detectOEM();
-
-  /// Performs a high-level permission and environment health check.
-  ///
-  /// Intended for:
-  /// - Debug screens
-  /// - Support logs
-  /// - Play Store reviewer diagnostics
-  Future<Map<String, dynamic>> permissionHealthCheck();
-
-  /// Creates a new folder.
-  Future<void> createFolder({
+  /// Returns:
+  /// {
+  ///   success: bool,
+  ///   finalName: String,
+  ///   path: String
+  /// }
+  Future<Map<String, dynamic>> create({
     required String parent,
     required String name,
-    required bool isSaf,
+    required int type, // 0 = file, 1 = folder
+    int conflictPolicy = 0,
+    String? manualRename,
   });
 
-  /// Creates a new file.
-  Future<void> createFile({
-    required String parent,
-    required String name,
-    String? mime,
-    required bool isSaf,
-  });
+  // ─────────────────────────────────────────────
+  // COPY / MOVE
+  // ─────────────────────────────────────────────
 
-  /// Copy file (native or SAF).
-  /// Returns a jobId immediately.
-  Future<String> copy({
+  /// Adaptive copy.
+  ///
+  /// May return:
+  /// - bool (immediate small copy)
+  /// - String (jobId for transactional copy)
+  Future<dynamic> copy({
     required String source,
-    required String destination,
-    required bool isSaf,
-  });
-
-  /// Move file (native or SAF).
-  /// Returns a jobId immediately.
-  Future<String> move({
-    required String source,
-    required String destination,
-    required bool isSaf,
-  });
-
-  /// Rename file or folder.
-  Future<void> rename({
-    required String target,
+    required String destinationParent,
     required String newName,
-    required bool isSaf,
+    int conflictPolicy = 0,
+    String? manualRename,
   });
 
-  /// Deletes a file or folder.
-  Future<void> delete({required String target, required bool isSaf});
+  Future<bool> cancelCopy(String jobId);
+  Future<bool> pauseCopy(String jobId);
+  Future<bool> resumeCopy(String jobId);
 
-  /// Moves a file or folder to trash.
-  Future<void> moveToTrash({
-    required String target,
-    required bool isSaf,
-    String? safRootUri,
+  /// Move operation.
+  Future<bool> move({
+    required String source,
+    required String destParent,
+    required String newName,
+    int conflictPolicy = 0,
+    String? manualRename,
   });
 
-  /// Lists trash entries.
+  /// Rename operation.
+  Future<bool> rename({
+    required String source,
+    required String newName,
+    int conflictPolicy = 0,
+    String? manualRename,
+  });
+
+  // ─────────────────────────────────────────────
+  // DELETE / TRASH
+  // ─────────────────────────────────────────────
+
+  /// Moves file/folder to trash.
+  Future<bool> delete({required String target});
+
+  /// Permanently deletes without trash.
+  Future<bool> permanentlyDelete({required String path});
+
   Future<List<StoraxTrashEntry>> listTrash();
 
-  /// Restores a trashed file or folder.
-  Future<void> restoreFromTrash(StoraxTrashEntry entry);
+  Future<bool> restoreFromTrash(StoraxTrashEntry entry);
 
-  /// Empties trash.
-  Future<void> emptyTrash({required bool isSaf, String? safRootUri});
+  Future<bool> permanentlyDeleteFromTrash(StoraxTrashEntry entry);
 
-  /// Opens a file for reading.
-  ///
-  /// [path] can be:
-  /// - A native filesystem path (e.g. `/storage/emulated/0/Download/file.txt`)
-  /// - A SAF URI (`content://…`)
-  /// - A file:// URI
-  ///
-  /// [mime] is optional and may be used to override the detected MIME type.
-  Future<void> openFile({String? path, String? mime, String? uri});
+  Future<bool> emptyTrash();
 
-  /// Generates a sequence of frames from a video file.
-  ///
-  /// [videoPath] can be:
-  /// - A native filesystem path (e.g. `/storage/emulated/0/Download/file.mp4`)
-  /// - A SAF URI (`content://…`)
-  /// - A file:// URI
-  ///
-  /// [width] and [height] are optional and may be used to resize the frames.
-  ///
-  /// [frameCount] is optional and defaults to 10.
-  Future<List<Uint8List>?> generateGifThumbnail({
+  // ─────────────────────────────────────────────
+  // UNDO / REDO
+  // ─────────────────────────────────────────────
+
+  Future<bool> undo();
+  Future<bool> redo();
+
+  Future<bool> canUndo();
+  Future<bool> canRedo();
+
+  Future<int> undoCount();
+  Future<int> redoCount();
+
+  Future<void> clearUndo();
+
+  // ─────────────────────────────────────────────
+  // FILE OPENING
+  // ─────────────────────────────────────────────
+
+  Future<void> openFile({String? path, String? uri, String? mime});
+
+  // ─────────────────────────────────────────────
+  // MEDIA
+  // ─────────────────────────────────────────────
+
+  Future<List<Uint8List>?> generateVideoThumbnail({
     required String videoPath,
     int? width,
     int? height,
-    int frameCount = 10,
+    int frameCount = 5,
   });
-
-  /// Generates a thumbnail for the given video.
-  ///
-  /// [videoPath] is the path to the video file.
-  ///
-  /// [width] and [height] are optional and may be used to resize the frames.
-  Future<List<Uint8List>?> generateUniqueFrame({
-    required String videoPath,
-    int? width,
-    int? height,
-  });
-
 }

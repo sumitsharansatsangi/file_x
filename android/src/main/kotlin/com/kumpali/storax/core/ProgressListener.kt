@@ -1,4 +1,5 @@
 package com.kumpali.storax.core
 
-class ProgressListener {
+fun interface ProgressListener {
+    suspend fun onProgress(progress: OperationProgress)
 }

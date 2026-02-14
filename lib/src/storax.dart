@@ -1,325 +1,227 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:storax/src/models/storax_oem.dart';
-import 'package:storax/src/models/storax_trash_entry.dart';
-import 'package:storax/src/models/storax_volume.dart';
 import 'package:storax/src/models/storax_entry.dart';
 import 'package:storax/src/models/storax_event.dart';
+import 'package:storax/src/models/storax_device_capabilities.dart';
+import 'package:storax/src/models/storax_trash_entry.dart';
+import 'package:storax/src/models/storax_volume.dart';
 import 'package:storax/src/platform/storax_method_channel.dart';
-
 import 'platform/storax_platform_interface.dart';
 
-/// Storax
+/// Main public API entry point for Storax.
 ///
-/// Public Flutter-facing API for the Storax plugin.
-///
-/// This class is a thin façade over [StoraxPlatform] that provides
-/// a clean, discoverable interface for application code.
-///
-/// App code should ONLY interact with this class.
-/// Platform-specific details (MethodChannel, Android SAF, etc.)
-/// are intentionally hidden.
+/// This class provides a unified, high-level storage API,
+/// abstracting native Android complexity.
 class Storax {
-  /// Event stream
+  Storax._();
+
+  static final Storax _instance = Storax._();
+
+  /// Singleton access.
+  static Storax get instance => _instance;
+
+  /// Stream of strongly-typed native events.
   Stream<StoraxEvent> get events => MethodChannelStorax.events;
 
-  Future<String?> getPlatformVersion() {
-    return StoraxPlatform.instance.getPlatformVersion();
-  }
-
-  Future<int?> getSDKIntVersion() {
-    return StoraxPlatform.instance.getSDKIntVersion();
-  }
-
-  /// Returns native filesystem roots such as:
-  /// - Internal storage
-  /// - External SD card
-  /// - USB OTG / external hard drives
-  /// - Adopted storage
-  ///
-  /// Each root includes storage statistics like total/free space.
-  Future<List<StoraxVolume>> getNativeRoots() {
-    return StoraxPlatform.instance.getNativeRoots();
-  }
-
-  /// Returns all available roots:
-  /// - Native filesystem roots
-  /// - SAF (Storage Access Framework) roots selected by the user
-  ///
-  /// Useful for building a unified "Select storage location" UI.
-  Future<List<StoraxVolume>> getAllRoots() {
-    return StoraxPlatform.instance.getAllRoots();
-  }
-
-  /// Lists immediate children of a directory.
-  ///
-  /// This is a **non-recursive** operation intended for fast
-  /// UI directory browsing.
-  ///
-  /// [target] may be:
-  /// - A native filesystem path
-  /// - A SAF URI (content://…)
-  ///
-  /// [isSaf] must correctly indicate the type of [target].
-  ///
-  /// Optional [filters] may include:
-  /// - minSize / maxSize (bytes)
-  /// - modifiedAfter / modifiedBefore (epoch millis)
-  /// - extensions (e.g. ["pdf", "jpg"])
-  /// - mimeTypes (e.g. ["image/*"])
-  Future<List<StoraxEntry>> listDirectory({
-    required String target,
-    required bool isSaf,
-    Map<String, dynamic>? filters,
-  }) {
-    return StoraxPlatform.instance.listDirectory(
-      target: target,
-      isSaf: isSaf,
-      filters: filters,
-    );
-  }
-
-  /// Recursively traverses a directory tree.
-  ///
-  /// This operation is:
-  /// - Depth-limited
-  /// - Filter-aware
-  /// - Executed off the UI thread on the native side
-  ///
-  /// Typical use cases:
-  /// - Search
-  /// - Media scanning
-  /// - Folder analytics
-  /// - Index building
-  Future<List<StoraxEntry>> traverseDirectory({
-    required String target,
-    required bool isSaf,
-    int maxDepth = 10,
-    Map<String, dynamic>? filters,
-  }) {
-    return StoraxPlatform.instance.traverseDirectory(
-      target: target,
-      isSaf: isSaf,
-      maxDepth: maxDepth,
-      filters: filters,
-    );
-  }
-
   // ─────────────────────────────────────────────
-  // SAF (Storage Access Framework)
+  // Roots & Capabilities
   // ─────────────────────────────────────────────
 
-  /// Opens the system SAF folder picker.
-  ///
-  /// After the user selects a folder, the native Android plugin
-  /// emits an `onSafPicked` callback on the MethodChannel.
-  ///
-  /// Your app should listen for that event if it needs the URI.
-  Future<void> openSafFolderPicker() {
-    return StoraxPlatform.instance.openSafFolderPicker();
-  }
+  Future<List<StoraxVolume>> getNativeRoots() =>
+      StoraxPlatform.instance.getNativeRoots();
+
+  Future<List<StoraxVolume>> getSafRoots() =>
+      StoraxPlatform.instance.getSafRoots();
+
+  Future<List<StoraxVolume>> getAllRoots() =>
+      StoraxPlatform.instance.getAllRoots();
 
   // ─────────────────────────────────────────────
   // Permissions
   // ─────────────────────────────────────────────
 
-  /// Returns `true` if the app has full filesystem access:
-  /// - MANAGE_EXTERNAL_STORAGE on Android 11+
-  /// - Always `true` on older Android versions
-  Future<bool> hasAllFilesAccess() {
-    return StoraxPlatform.instance.hasAllFilesAccess();
-  }
+  Future<bool> hasAllFilesAccess() =>
+      StoraxPlatform.instance.hasAllFilesAccess();
 
-  /// Opens the system settings screen where the user
-  /// can grant full filesystem (file manager) access.
-  Future<void> requestAllFilesAccess() {
-    return StoraxPlatform.instance.requestAllFilesAccess();
-  }
+  Future<void> requestAllFilesAccess() =>
+      StoraxPlatform.instance.requestAllFilesAccess();
+
+  // ─────────────────────────────────────────────
+  // SAF
+  // ─────────────────────────────────────────────
+
+  Future<void> openSafFolderPicker() =>
+      StoraxPlatform.instance.openSafFolderPicker();
+
+  // ─────────────────────────────────────────────
+  // Directory
+  // ─────────────────────────────────────────────
+
+  Future<List<StoraxEntry>> listDirectory({required String target}) =>
+      StoraxPlatform.instance.listDirectory(target: target);
+
+  Future<List<StoraxEntry>> traverseDirectory({
+    required String target,
+    int maxDepth = -1,
+  }) => StoraxPlatform.instance.traverseDirectory(
+    target: target,
+    maxDepth: maxDepth,
+  );
+
+  // ─────────────────────────────────────────────
+  // Create
+  // ─────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> create({
+    required String parent,
+    required String name,
+    required int type,
+    int conflictPolicy = 0,
+    String? manualRename,
+  }) => StoraxPlatform.instance.create(
+    parent: parent,
+    name: name,
+    type: type,
+    conflictPolicy: conflictPolicy,
+    manualRename: manualRename,
+  );
+
+  // ─────────────────────────────────────────────
+  // Copy / Move / Rename
+  // ─────────────────────────────────────────────
+
+  Future<dynamic> copy({
+    required String source,
+    required String destinationParent,
+    required String newName,
+    int conflictPolicy = 0,
+    String? manualRename,
+  }) => StoraxPlatform.instance.copy(
+    source: source,
+    destinationParent: destinationParent,
+    newName: newName,
+    conflictPolicy: conflictPolicy,
+    manualRename: manualRename,
+  );
+
+  Future<bool> cancelCopy(String jobId) =>
+      StoraxPlatform.instance.cancelCopy(jobId);
+
+  Future<bool> pauseCopy(String jobId) =>
+      StoraxPlatform.instance.pauseCopy(jobId);
+
+  Future<bool> resumeCopy(String jobId) =>
+      StoraxPlatform.instance.resumeCopy(jobId);
+
+  Future<bool> move({
+    required String source,
+    required String destParent,
+    required String newName,
+    int conflictPolicy = 0,
+    String? manualRename,
+  }) => StoraxPlatform.instance.move(
+    source: source,
+    destParent: destParent,
+    newName: newName,
+    conflictPolicy: conflictPolicy,
+    manualRename: manualRename,
+  );
+
+  Future<bool> rename({
+    required String source,
+    required String newName,
+    int conflictPolicy = 0,
+    String? manualRename,
+  }) => StoraxPlatform.instance.rename(
+    source: source,
+    newName: newName,
+    conflictPolicy: conflictPolicy,
+    manualRename: manualRename,
+  );
+
+  // ─────────────────────────────────────────────
+  // Delete & Trash
+  // ─────────────────────────────────────────────
+
+  Future<bool> delete({required String target}) =>
+      StoraxPlatform.instance.delete(target: target);
+
+  Future<bool> permanentlyDelete({required String path}) =>
+      StoraxPlatform.instance.permanentlyDelete(path: path);
+
+  Future<List<StoraxTrashEntry>> listTrash() =>
+      StoraxPlatform.instance.listTrash();
+
+  Future<bool> restoreFromTrash(StoraxTrashEntry entry) =>
+      StoraxPlatform.instance.restoreFromTrash(entry);
+
+  Future<bool> permanentlyDeleteFromTrash(StoraxTrashEntry entry) =>
+      StoraxPlatform.instance.permanentlyDeleteFromTrash(entry);
+
+  Future<bool> emptyTrash() => StoraxPlatform.instance.emptyTrash();
+
+  // ─────────────────────────────────────────────
+  // Undo / Redo
+  // ─────────────────────────────────────────────
+
+  Future<bool> undo() => StoraxPlatform.instance.undo();
+
+  Future<bool> redo() => StoraxPlatform.instance.redo();
+
+  Future<bool> canUndo() => StoraxPlatform.instance.canUndo();
+
+  Future<bool> canRedo() => StoraxPlatform.instance.canRedo();
+
+  Future<int> undoCount() => StoraxPlatform.instance.undoCount();
+
+  Future<int> redoCount() => StoraxPlatform.instance.redoCount();
+
+  Future<void> clearUndo() => StoraxPlatform.instance.clearUndo();
+
+  // ─────────────────────────────────────────────
+  // File Opening
+  // ─────────────────────────────────────────────
+
+  Future<void> openFile({String? path, String? uri, String? mime}) =>
+      StoraxPlatform.instance.openFile(path: path, uri: uri, mime: mime);
+
+  // ─────────────────────────────────────────────
+  // Media
+  // ─────────────────────────────────────────────
+
+  Future<List<Uint8List>?> generateVideoThumbnail({
+    required String videoPath,
+    int? width,
+    int? height,
+    int frameCount = 5,
+  }) => StoraxPlatform.instance.generateVideoThumbnail(
+    videoPath: videoPath,
+    width: width,
+    height: height,
+    frameCount: frameCount,
+  );
 
   // ─────────────────────────────────────────────
   // Diagnostics
   // ─────────────────────────────────────────────
 
-  /// Returns OEM and device information such as:
-  /// - manufacturer
-  /// - brand
-  /// - model
-  /// - SDK level
-  ///
-  /// Useful for debugging OEM-specific storage behavior.
-  Future<StoraxOem?> detectOEM() {
-    return StoraxPlatform.instance.detectOEM();
+ Future<StoraxDeviceCapabilities?> getDeviceCapabilities() =>
+      StoraxPlatform.instance.getDeviceCapabilities();
+
+
+  // ─────────────────────────────────────────────
+  // Utilities
+  // ─────────────────────────────────────────────
+
+  /// Converts raw byte count into human-readable string.
+  String formatBytes(int bytes, [int decimals = 2]) {
+    if (bytes <= 0) return "0 B";
+
+    const suffixes = ["B", "KB", "MB", "GB", "TB", "PB"];
+
+    final i = (math.log(bytes) / math.log(1024)).floor();
+
+    return '${(bytes / math.pow(1024, i)).toStringAsFixed(decimals)} ${suffixes[i]}';
   }
-
-  /// Performs a high-level permission and environment health check.
-  ///
-  /// Intended for:
-  /// - Debug screens
-  /// - Support logs
-  /// - Play Store reviewer diagnostics
-  Future<Map<String, dynamic>> permissionHealthCheck() {
-    return StoraxPlatform.instance.permissionHealthCheck();
-  }
-
-  /// Creates a new folder.
-  Future<void> createFolder({
-    required String parent,
-    required String name,
-    required bool isSaf,
-  }) {
-    return StoraxPlatform.instance.createFolder(
-      parent: parent,
-      name: name,
-      isSaf: isSaf,
-    );
-  }
-
-  /// Creates a new file.
-  Future<void> createFile({
-    required String parent,
-    required String name,
-    String? mime,
-    required bool isSaf,
-  }) {
-    return StoraxPlatform.instance.createFile(
-      parent: parent,
-      name: name,
-      mime: mime,
-      isSaf: isSaf,
-    );
-  }
-
-  /// Copy file (native or SAF).
-  /// Returns a jobId immediately.
-  Future<String> copy({
-    required String source,
-    required String destination,
-    required bool isSaf,
-  }) {
-    return StoraxPlatform.instance.copy(
-      source: source,
-      destination: destination,
-      isSaf: isSaf,
-    );
-  }
-
-  /// Move file (native or SAF).
-  /// Returns a jobId immediately.
-  Future<String> move({
-    required String source,
-    required String destination,
-    required bool isSaf,
-  }) {
-    return StoraxPlatform.instance.move(
-      source: source,
-      destination: destination,
-      isSaf: isSaf,
-    );
-  }
-
-  /// Rename file or folder.
-  Future<void> rename({
-    required String target,
-    required String newName,
-    required bool isSaf,
-  }) {
-    return StoraxPlatform.instance.rename(
-      target: target,
-      newName: newName,
-      isSaf: isSaf,
-    );
-  }
-
-  /// Deletes a file or folder.
-  Future<void> delete({required String target, required bool isSaf}) {
-    return StoraxPlatform.instance.delete(target: target, isSaf: isSaf);
-  }
-
-  Future<void> moveToTrash({
-    required String target,
-    required bool isSaf,
-    String? safRootUri,
-  }) => StoraxPlatform.instance.moveToTrash(
-    target: target,
-    isSaf: isSaf,
-    safRootUri: safRootUri,
-  );
-
-  Future<List<StoraxTrashEntry>> listTrash() =>
-      StoraxPlatform.instance.listTrash();
-
-  Future<void> restoreFromTrash(StoraxTrashEntry entry) =>
-      StoraxPlatform.instance.restoreFromTrash(entry);
-
-  Future<void> emptyTrash({required bool isSaf, String? safRootUri}) =>
-      StoraxPlatform.instance.emptyTrash(isSaf: isSaf, safRootUri: safRootUri);
-
-  /// Opens a file for reading.
-  ///
-  /// [path] can be:
-  /// - A native filesystem path (e.g. `/storage/emulated/0/Download/file.txt`)
-  /// - A SAF URI (`content://…`)
-  /// - A file:// URI
-  ///
-  /// [mime] is optional and may be used to override the detected MIME type.
- Future<void> openFile({required String path, String? mime}) {
-    String? resolvedPath;
-    String? resolvedUri;
-
-    final parsed = Uri.tryParse(path);
-
-    if (parsed != null && parsed.scheme == 'content') {
-      // SAF / shared URI
-      resolvedUri = path;
-    } else {
-      // Everything else = filesystem path
-      resolvedPath = path;
-    }
-
-    return StoraxPlatform.instance.openFile(
-      path: resolvedPath,
-      uri: resolvedUri,
-      mime: mime,
-    );
-  }
-
-  String formatBytes(int bytes) {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    double size = bytes.toDouble();
-    int unit = 0;
-
-    while (size >= 1024 && unit < units.length - 1) {
-      size /= 1024;
-      unit++;
-    }
-
-    return '${size.toStringAsFixed(2)} ${units[unit]}';
-  }
-
-  Future<List<Uint8List>?> generateGifThumbnail({
-    required String videoPath,
-    int? width,
-    int? height,
-    int frameCount = 10,
-  }) {
-    return StoraxPlatform.instance.generateGifThumbnail(
-      videoPath: videoPath,
-      width: width,
-      height: height,
-      frameCount: frameCount,
-    );
-  }
-
-  Future<List<Uint8List>?> generateUniqueFrame({
-    required String videoPath,
-    int? width,
-    int? height,
-  }) {
-    return StoraxPlatform.instance.generateUniqueFrame(
-      videoPath: videoPath,
-      width: width,
-      height: height,
-    );
-  }
-
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -105,8 +106,8 @@ class _RootsPageState extends State<RootsPage> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => FileManagerPage(
-                          initialPath: (r.uri ?? r.path)!,
-                          title: r.name,
+                          root: (r.uri ?? r.path)!,
+                        
                         ),
                       ),
                     );
@@ -122,103 +123,405 @@ class _RootsPageState extends State<RootsPage> {
  * FILE MANAGER PAGE (PRODUCTION STYLE)
  * ───────────────────────────────────────────── */
 
-class FileManagerPage extends StatefulWidget {
-  final String initialPath;
-  final String title;
+enum ViewMode { list, grid }
 
-  const FileManagerPage({
-    super.key,
-    required this.initialPath,
-    required this.title,
-  });
+enum SortOption { name, date, size }
+
+class FileManagerPage extends StatefulWidget {
+  final String root;
+  const FileManagerPage({super.key, required this.root});
 
   @override
   State<FileManagerPage> createState() => _FileManagerPageState();
 }
-
-class _FileManagerPageState extends State<FileManagerPage> {
+class _FileManagerPageState extends State<FileManagerPage>
+    with TickerProviderStateMixin {
   final storax = Storax.instance;
 
   final List<String> pathStack = [];
-  final Set<StoraxEntry> selected = {};
-
   List<StoraxEntry> entries = [];
+  List<StoraxEntry> filtered = [];
+
+  final Set<String> selectedPaths = {};
 
   bool loading = false;
-  double? transferPercent;
-  bool canUndo = false;
-  bool canRedo = false;
+  bool showPreview = false;
+  StoraxEntry? previewItem;
 
-  StreamSubscription? _eventSub;
+  ViewMode viewMode = ViewMode.list;
+  SortOption sortOption = SortOption.name;
+  bool ascending = true;
+  String filterType = "all";
+
+  final Map<String, double> jobProgress = {};
+  StreamSubscription? jobSub;
 
   @override
   void initState() {
     super.initState();
-    pathStack.add(widget.initialPath);
-    _listenEvents();
+    pathStack.add(widget.root);
     _load();
+    _listenJobs();
   }
 
-  void _listenEvents() {
-    _eventSub = storax.events.listen((event) {
+  void _listenJobs() {
+    jobSub = storax.events.listen((event) {
       if (event is TransferProgressEvent) {
         setState(() {
-          transferPercent = event.percent;
-        });
-      }
-
-      if (event is UndoStateChangedEvent) {
-        setState(() {
-          canUndo = event.canUndo;
-          canRedo = event.canRedo;
+          jobProgress[event.jobId] = event.percent;
         });
       }
     });
   }
+
+  @override
+  void dispose() {
+    jobSub?.cancel();
+    super.dispose();
+  }
+
+  /* ───────────────── LOAD ───────────────── */
 
   Future<void> _load() async {
     setState(() => loading = true);
     final data = await storax.listDirectory(target: pathStack.last);
+    entries = data;
+    _applyFilters();
+    setState(() => loading = false);
+  }
 
-    data.sort((a, b) {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              _buildBreadcrumb(),
+              _buildToolbar(),
+              Expanded(
+                child: loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: viewMode == ViewMode.list
+                            ? _buildList()
+                            : _buildGrid(),
+                      ),
+              ),
+            ],
+          ),
+
+          // Transfer Progress Overlay
+          _buildTransferPanel(),
+
+          // Preview Drawer
+          _buildPreviewDrawer(),
+        ],
+      ),
+    );
+  }
+PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: Text(
+        pathStack.last.split('/').last.isEmpty
+            ? "/"
+            : pathStack.last.split('/').last,
+      ),
+      actions: [
+        if (selectedPaths.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () async {
+              for (final path in selectedPaths) {
+                await storax.delete(target: path);
+              }
+              selectedPaths.clear();
+              _load();
+            },
+          ),
+        IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+      ],
+    );
+  }
+Widget _buildBreadcrumb() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(pathStack.length, (i) {
+          final name = pathStack[i].split('/').last;
+          return Row(
+            children: [
+              TextButton(
+                onPressed: () => _popTo(i),
+                child: Text(name.isEmpty ? "/" : name),
+              ),
+              if (i != pathStack.length - 1) const Icon(Icons.chevron_right),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+Widget _buildToolbar() {
+    return Row(
+      children: [
+        PopupMenuButton<SortOption>(
+          icon: const Icon(Icons.sort),
+          onSelected: (v) {
+            setState(() {
+              if (sortOption == v) ascending = !ascending;
+              sortOption = v;
+              _applyFilters();
+            });
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: SortOption.name, child: Text("Name")),
+            PopupMenuItem(value: SortOption.date, child: Text("Date")),
+            PopupMenuItem(value: SortOption.size, child: Text("Size")),
+          ],
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.filter_list),
+          onSelected: (v) {
+            setState(() {
+              filterType = v;
+              _applyFilters();
+            });
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: "all", child: Text("All")),
+            PopupMenuItem(value: "images", child: Text("Images")),
+            PopupMenuItem(value: "videos", child: Text("Videos")),
+            PopupMenuItem(value: "docs", child: Text("Documents")),
+          ],
+        ),
+        IconButton(
+          icon: Icon(
+            viewMode == ViewMode.list ? Icons.grid_view : Icons.view_list,
+          ),
+          onPressed: () {
+            setState(() {
+              viewMode = viewMode == ViewMode.list
+                  ? ViewMode.grid
+                  : ViewMode.list;
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+
+  /* ───────────────── FILTER & SORT ───────────────── */
+
+  void _applyFilters() {
+    filtered = entries.where((e) {
+      if (filterType == "all") return true;
+      if (filterType == "images") return e.mime?.contains("image") ?? false;
+      if (filterType == "videos") return e.mime?.contains("video") ?? false;
+      if (filterType == "docs") {
+        return (e.mime?.contains("pdf") ?? false) ||
+            e.name.endsWith(".doc") ||
+            e.name.endsWith(".txt");
+      }
+      return true;
+    }).toList();
+
+    filtered.sort((a, b) {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.compareTo(b.name);
-    });
 
-    if (!mounted) return;
-    setState(() {
-      entries = data;
-      loading = false;
+      int cmp;
+      switch (sortOption) {
+        case SortOption.date:
+          cmp = a.lastModified.compareTo(b.lastModified);
+          break;
+        case SortOption.size:
+          cmp = (a.size).compareTo(b.size);
+          break;
+        default:
+          cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
+      return ascending ? cmp : -cmp;
     });
   }
 
-  /* ─────────────────────────────────────────────
-   * OPERATIONS
-   * ───────────────────────────────────────────── */
+  /* ───────────────── SELECTION ───────────────── */
 
-  void _showItemMenu(StoraxEntry e) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Wrap(
+  bool _isSelected(StoraxEntry e) {
+    return selectedPaths.contains(e.path ?? e.uri);
+  }
+
+  void _toggleSelect(StoraxEntry e) {
+    final key = e.path ?? e.uri;
+    if (key == null) return;
+
+    setState(() {
+      selectedPaths.contains(key)
+          ? selectedPaths.remove(key)
+          : selectedPaths.add(key);
+    });
+  }
+
+  /* ───────────────── NAVIGATION ───────────────── */
+
+  void _openEntry(StoraxEntry e) {
+    final target = e.path ?? e.uri;
+    if (target == null) return;
+
+    if (e.isDirectory) {
+      setState(() => pathStack.add(target));
+      _load();
+    } else {
+      storax.openFile(path: target);
+    }
+  }
+
+  void _popTo(int index) {
+    setState(() {
+      pathStack.removeRange(index + 1, pathStack.length);
+    });
+    _load();
+  }
+
+  /* ───────────────── FILE TILE ───────────────── */
+
+  Widget _fileTile(StoraxEntry e) {
+    final selected = _isSelected(e);
+
+    return GestureDetector(
+      onTap: () {
+        if (selectedPaths.isNotEmpty) {
+          _toggleSelect(e);
+        } else {
+          _openEntry(e);
+        }
+      },
+      onLongPress: () => _toggleSelect(e),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: selected
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: viewMode == ViewMode.grid
+            ? _gridTileContent(e)
+            : _listTileContent(e),
+      ),
+    );
+  }
+
+  Widget _listTileContent(StoraxEntry e) {
+    return Row(
+      children: [
+        Icon(_iconFor(e),
+            color: e.isDirectory ? Colors.amber : Colors.blueGrey),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(e.name, overflow: TextOverflow.ellipsis),
+              Text(
+                _formatBytes(e.size),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        if (selectedPaths.isNotEmpty)
+          Checkbox(value: _isSelected(e), onChanged: (_) => _toggleSelect(e)),
+        IconButton(
+          icon: const Icon(Icons.info_outline),
+          onPressed: () => _openPreview(e),
+        ),
+      ],
+    );
+  }
+
+  Widget _gridTileContent(StoraxEntry e) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(_iconFor(e),
+            size: 40,
+            color: e.isDirectory ? Colors.amber : Colors.blueGrey),
+        const SizedBox(height: 8),
+        Text(
+          e.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  IconData _iconFor(StoraxEntry e) {
+    if (e.isDirectory) return Icons.folder;
+    final mime = e.mime ?? '';
+    if (mime.startsWith("image")) return Icons.image;
+    if (mime.startsWith("video")) return Icons.movie;
+    if (mime.startsWith("audio")) return Icons.music_note;
+    return Icons.insert_drive_file;
+  }
+
+  /* ───────────────── GRID / LIST BUILDERS ───────────────── */
+
+  Widget _buildList() {
+    return ListView.builder(
+      itemCount: filtered.length,
+      itemBuilder: (_, i) => _fileTile(filtered[i]),
+    );
+  }
+
+  Widget _buildGrid() {
+    return GridView.builder(
+      gridDelegate:
+          const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3),
+      itemCount: filtered.length,
+      itemBuilder: (_, i) => _fileTile(filtered[i]),
+    );
+  }
+
+  /* ───────────────── PREVIEW ───────────────── */
+
+  void _openPreview(StoraxEntry e) {
+    setState(() {
+      previewItem = e;
+      showPreview = true;
+    });
+  }
+
+  Widget _buildPreviewDrawer() {
+    if (!showPreview || previewItem == null) return const SizedBox();
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        width: 350,
+        color: Colors.white,
+        child: Column(
           children: [
             ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text("Rename"),
-              onTap: () {
-                Navigator.pop(context);
-                _rename(e);
-              },
+              title: Text(previewItem!.name),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => showPreview = false),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text("Delete"),
-              onTap: () async {
-                Navigator.pop(context);
-                await storax.delete(target: e.path ?? e.uri!);
-                _load();
-              },
+            Expanded(
+              child: previewItem!.mime?.contains("image") ?? false
+                  ? Image.file(File(previewItem!.path!), fit: BoxFit.contain)
+                  : const Center(child: Text("Preview not supported")),
             ),
           ],
         ),
@@ -226,215 +529,46 @@ class _FileManagerPageState extends State<FileManagerPage> {
     );
   }
 
-  Future<void> _rename(StoraxEntry e) async {
-    final controller = TextEditingController(text: e.name);
+  /* ───────────────── TRANSFER PANEL ───────────────── */
 
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Rename"),
-        content: TextField(controller: controller),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+  Widget _buildTransferPanel() {
+    if (jobProgress.isEmpty) return const SizedBox();
+
+    return Positioned(
+      right: 12,
+      bottom: 12,
+      child: Card(
+        child: SizedBox(
+          width: 260,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: jobProgress.entries.map((e) {
+              return ListTile(
+                title: Text(e.key),
+                subtitle: LinearProgressIndicator(
+                  value: e.value / 100,
+                ),
+              );
+            }).toList(),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text("OK"),
-          ),
-        ],
+        ),
       ),
     );
-
-    if (newName != null) {
-      await storax.rename(
-        source: e.path ?? e.uri!,
-        newName: newName,
-        conflictPolicy: 2,
-      );
-      _load();
-    }
   }
 
-  Future<void> _deleteSelected() async {
-    for (final e in selected) {
-      await storax.delete(target: e.path ?? e.uri!);
-    }
-    selected.clear();
-    _load();
-  }
 
-  Future<void> _copySelected() async {
-    if (selected.isEmpty) return;
 
-    for (final e in selected) {
-      await storax.copy(
-        source: e.path ?? e.uri!,
-        destinationParent: pathStack.last,
-        newName: e.name,
-      );
-    }
-    selected.clear();
-    _load();
-  }
-
-  /* ─────────────────────────────────────────────
-   * BUILD
-   * ───────────────────────────────────────────── */
-
-  @override
-  Widget build(BuildContext context) {
-    final multiSelect = selected.isNotEmpty;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: multiSelect
-            ? Text("${selected.length} selected")
-            : Text(widget.title),
-        leading: multiSelect
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => setState(() => selected.clear()),
-              )
-            : null,
-        actions: [
-          if (!multiSelect)
-            IconButton(
-              icon: const Icon(Icons.undo),
-              onPressed: canUndo ? () => storax.undo() : null,
-            ),
-          if (!multiSelect)
-            IconButton(
-              icon: const Icon(Icons.redo),
-              onPressed: canRedo ? () => storax.redo() : null,
-            ),
-          if (multiSelect)
-            IconButton(icon: const Icon(Icons.copy), onPressed: _copySelected),
-          if (multiSelect)
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _deleteSelected,
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (transferPercent != null)
-            LinearProgressIndicator(value: transferPercent),
-          Expanded(
-            child: loading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    itemCount: entries.length,
-                    itemBuilder: (_, i) {
-                      final e = entries[i];
-                      final isSelected = selected.contains(e);
-
-                      return ListTile(
-                        selected: isSelected,
-                        leading: Icon(
-                          e.isDirectory
-                              ? Icons.folder
-                              : Icons.insert_drive_file,
-                        ),
-                        title: Text(e.name),
-                        subtitle: e.isDirectory
-                            ? const Text("Folder")
-                            : Text(_formatBytes(e.size)),
-                        trailing: multiSelect
-                            ? Checkbox(
-                                value: isSelected,
-                                onChanged: (_) {
-                                  setState(() {
-                                    isSelected
-                                        ? selected.remove(e)
-                                        : selected.add(e);
-                                  });
-                                },
-                              )
-                            : null,
-                        onTap: multiSelect
-                            ? () {
-                                setState(() {
-                                  isSelected
-                                      ? selected.remove(e)
-                                      : selected.add(e);
-                                });
-                              }
-                            : () {
-                                if (e.isDirectory) {
-                                  pathStack.add(e.path ?? e.uri!);
-                                  _load();
-                                } else {
-                                  storax.openFile(path: e.path, uri: e.uri);
-                                }
-                              },
-                        onLongPress: () {
-                          if (selected.isEmpty) {
-                            _showItemMenu(e);
-                          } else {
-                            setState(() => selected.add(e));
-                          }
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-      floatingActionButton: multiSelect
-          ? null
-          : FloatingActionButton(
-              onPressed: () async {
-                final controller = TextEditingController();
-                final name = await showDialog<String>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text("New Folder"),
-                    content: TextField(controller: controller),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Cancel"),
-                      ),
-                      ElevatedButton(
-                        onPressed: () =>
-                            Navigator.pop(context, controller.text),
-                        child: const Text("Create"),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (name != null) {
-                  await storax.create(
-                    parent: pathStack.last,
-                    name: name,
-                    type: 1,
-                  );
-                  _load();
-                }
-              },
-              child: const Icon(Icons.create_new_folder),
-            ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _eventSub?.cancel();
-    super.dispose();
-  }
 }
 
-/* ─────────────────────────────────────────────
+
+  /* ─────────────────────────────────────────────
  * UTIL
  * ───────────────────────────────────────────── */
 
-String _formatBytes(int bytes) {
-  if (bytes <= 0) return "0 B";
-  const suffixes = ["B", "KB", "MB", "GB", "TB"];
-  final i = (math.log(bytes) / math.log(1024)).floor();
-  return "${(bytes / math.pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}";
-}
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    final i = (math.log(bytes) / math.log(1024)).floor();
+    return "${(bytes / math.pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}";
+  }
+

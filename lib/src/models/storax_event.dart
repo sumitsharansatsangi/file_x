@@ -1,8 +1,28 @@
-enum StoraxEventType { usbAttached, usbDetached, safPicked, transferProgress }
+sealed class StoraxEvent {
+  const StoraxEvent();
+}
 
-class StoraxEvent {
-  final StoraxEventType type;
-  final dynamic payload; // ✅ FIXED
+class UsbAttachedEvent extends StoraxEvent {
+  const UsbAttachedEvent();
+}
 
-  const StoraxEvent(this.type, {this.payload});
+class UsbDetachedEvent extends StoraxEvent {
+  const UsbDetachedEvent();
+}
+
+class SafPickedEvent extends StoraxEvent {
+  final String uri;
+  const SafPickedEvent(this.uri);
+}
+
+class TransferProgressEvent extends StoraxEvent {
+  final String jobId;
+  final double percent;
+  const TransferProgressEvent(this.jobId, this.percent);
+}
+
+class UndoStateChangedEvent extends StoraxEvent {
+  final bool canUndo;
+  final bool canRedo;
+  const UndoStateChangedEvent(this.canUndo, this.canRedo);
 }

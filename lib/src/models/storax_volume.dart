@@ -38,7 +38,7 @@ class StoraxVolume {
 
   factory StoraxVolume.fromMap(Map<String, dynamic> map) {
     return StoraxVolume(
-      mode: StoraxMode.fromString(map['type'] ?? map['storageType']),
+      mode: StoraxMode.fromString(map['type']),
       name: map['name'] as String? ?? '',
       path: map['path'] as String?,
       uri: map['uri'] as String?,

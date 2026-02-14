@@ -1,4 +1,9 @@
 package com.kumpali.storax.core
 
-class NodeInfo {
-}
+data class NodeInfo(
+    val name: String,
+    val pathOrUri: String,
+    val isDirectory: Boolean,
+    val size: Long,
+    val lastModified: Long
+)
